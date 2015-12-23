@@ -1,0 +1,25 @@
+{
+    "contents" : "",
+    "created" : 1449416166731.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "1E79784E",
+    "lastKnownWriteTime" : 0,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "hl17knq2i6",
+        "caption" : "fallPheno",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=fallPheno&cache_key=hl17knq2i6",
+        "displayedObservations" : "14560",
+        "environment" : "",
+        "object" : "fallPheno",
+        "totalObservations" : "14560",
+        "variables" : "13"
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "type" : "r_dataframe"
+}

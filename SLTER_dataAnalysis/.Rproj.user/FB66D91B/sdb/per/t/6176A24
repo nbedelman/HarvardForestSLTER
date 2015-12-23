@@ -1,0 +1,18 @@
+{
+    "contents" : "#read in the fall phenology data\nfallPheno=read.csv(\"../fall_phenology.csv\")\n\n#read in the species code info\nspeciesCodes=read.csv(\"../species_codes.csv\")\n\n#give a unique identifier to each tree\nfallPheno$schoolNum=as.numeric(as.factor(fallPheno$School.Code))\nfallPheno$uniqTreeID=(fallPheno$schoolNum*100 + fallPheno$Tree.ID)\n\n#associate the tres with species\nvec <- c()\nfor (i in seq(1,length(fallPheno$Species.Code))){\n  tryCatch(vec[i] <- (which(speciesCodes$Species.Code==as.character(fallPheno$Species.Code[i]))), \n           error=function(e){vec[i] <- 89})\n  }\n#fallPheno$specIDNum = vec\nSciNames = as.character(speciesCodes[vec,3])\nsplitNames=strsplit(SciNames, \" \")\ngenusVec = c()\nspeciesVec=c()\nfor(i in seq(1,length(splitNames))){\n  genusVec[i]=splitNames[i][[1]][1]\n  speciesVec[i]=splitNames[i][[1]][2]\n}\nfallPheno$genus = genusVec\nfallPheno$species = speciesVec\n",
+    "created" : 1449410701222.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "180676024",
+    "id" : "6176A24",
+    "lastKnownWriteTime" : 1449417012,
+    "path" : "~/Documents/Harvard_Forest/Schoolyard_Data/SLTER_dataAnalysis/SLTER_dataAnalysis.R",
+    "project_path" : "SLTER_dataAnalysis.R",
+    "properties" : {
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "type" : "r_source"
+}

@@ -1,0 +1,25 @@
+{
+    "contents" : "",
+    "created" : 1449412590128.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "40690C4D",
+    "lastKnownWriteTime" : 5764607523304087697,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "3gs6pssrnq",
+        "caption" : "speciesCodes",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=speciesCodes&cache_key=3gs6pssrnq",
+        "displayedObservations" : 91,
+        "environment" : "",
+        "object" : "speciesCodes",
+        "totalObservations" : 91,
+        "variables" : 3
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "type" : "r_dataframe"
+}
