@@ -1,3 +1,18 @@
+# HARVARD FOREST SCHOOLYARD ECOLOGY DATA ANALYSIS
+# Data taken winter 2015-16 from http://harvardforest2.fas.harvard.edu/asp/hf/php/k12/k12_data.php
+# Code by Nate Edelman
+
+# Each data section (eg Fall Phenology Data) is self-contained. 
+# Environmental variables should be cleared when switching from one section to the next to avoid 
+#    mistakes due to re-used variable names
+
+# Questions: are trees/pools/streams consistent across years within each teacher? school? 
+
+#######################################################
+
+#uncomment install lines if packages not yet installed
+install.packages("ggplot2")
+install.packages("reshape2")
 library("ggplot2")
 library("reshape2")
 
@@ -16,6 +31,8 @@ speciesCodes=read.csv("../species_codes.csv")
 #give a unique identifier to each tree
 fallPheno$schoolNum=as.numeric(as.factor(fallPheno$School.Code))
 fallPheno$uniqTreeID=(fallPheno$schoolNum*100 + fallPheno$Tree.ID)
+
+#Get year as an identifier
 fallPheno$Date=as.Date(fallPheno$Date)
 fallPheno$Year=format(fallPheno$Date, "%Y")
 
@@ -124,10 +141,10 @@ graph1 <- ggplot() +
   stat_smooth(data=usable, formula=y~x, aes(x=combiDate, y=combiValue, colour=combiVariable)) + 
   scale_y_continuous(limits=c(-.1, 1.1)) +
   scale_x_continuous(limits=c(240, 350)) +
-  annotate("text", x = 253, y = 1.0, label = paste0("Number of Trees: ", numTrees)) +
-  annotate("text", x = 253, y = 0.95, label = paste0("Number of Observations: ",numObs)) +
-  annotate("text", x = 253, y = 0.9, label = paste0("Number of Years: ",numYears)) +
-  labs(title="Tree Color and Leaf Fall by Julian Date", x="Julian Date", y="Normalized Tree Color, Percent of Leaves Fallen")
+  annotate("text", x = 265, y = 1.0, label = paste0("Number of Trees: ", numTrees)) +
+  annotate("text", x = 265, y = 0.95, label = paste0("Number of Observations: ",numObs)) +
+  annotate("text", x = 265, y = 0.9, label = paste0("Number of Years: ",numYears)) +
+  labs(title="Tree Color and Leaf Fall by Julian Date", x="Julian Date", y="Normalized Tree Color, Percent of Leaves Fallen", colour="Variable")
 ggsave(graph1,filename="combinedOverall.png")
 graph1
 
@@ -278,7 +295,6 @@ p(byGenusColor, byGenusLeafFall)
 
 
 
-
 ############################################
 ###### Spring Phenology Data ############
 ############################################
@@ -402,7 +418,7 @@ graph1 <- ggplot() +
   annotate("text", x = 90, y = 1.1, label = paste0("Number of Trees: ", numTrees)) +
   annotate("text", x = 90, y = 1.05, label = paste0("Number of Observations: ",numObs))+
   annotate("text", x = 90, y = 1, label = paste0("Number of Years: ",numYears))+
-  labs(title="Bud Open and Leaf Length by Julian Date", x="Julian Date", y="Normalized Leaf Length, Percent of Buds Open")
+  labs(title="Bud Open and Leaf Length by Julian Date", x="Julian Date", y="Normalized Leaf Length, Percent of Buds Open", colour="Variable")
 ggsave(graph1,filename="combinedSpringOverall.png")
 graph1
 
@@ -561,6 +577,8 @@ p <- function(x,y){
 }
 p(byGenusLeafLength, byGenusBuds)
 
+
+
 ############################################
 ###### Hemlock Wooly Adelgid Data ##########
 ############################################
@@ -597,3 +615,425 @@ overviewInfo <- function(data, timeColumn, dataColumn, allDates){
   }
   return(allAverages)
 }
+
+
+
+############################################
+
+
+############################################
+###### Vernal Pool Data ####################
+############################################
+
+################### Formatting ########################
+
+#read in the vernal pool data
+vernalPool=read.csv("../vernal_pools.csv")
+
+
+#Get year as an identifier
+vernalPool$Date=as.Date(vernalPool$Date)
+vernalPool$Year=format(vernalPool$Date, "%Y")
+
+#give a unique identifier to each pool
+vernalPool$teacherNum=as.numeric(as.factor(vernalPool$Teacher))
+vernalPool$uniqPoolID=(vernalPool$teacherNum*100 + vernalPool$Pool)
+
+
+
+#get max values of depth air temp, and water temp
+
+maxVals <- function(data, variable, group){
+  maxes=c()
+  for (i in 1:nrow(data)){
+  maxes=c(maxes,max(subset(data, data[group][[1]] == data[i,][group][[1]])[variable][[1]], na.rm=TRUE))
+  }
+  return(maxes)
+}
+
+vernalPool$maxDepth=maxVals(vernalPool, "Depth..cm.", "uniqPoolID")
+vernalPool$maxAirTemp=maxVals(vernalPool, "Air.Temp..c.", "uniqPoolID")
+vernalPool$maxWaterTemp=maxVals(vernalPool, "Water.Temp..c.", "uniqPoolID")
+
+#get percentages of all variables
+vernalPool$pctDiam=vernalPool$Diameter..m./vernalPool$Max.Diameter..m.
+vernalPool$pctDepth=vernalPool$Depth..cm./vernalPool$maxDepth
+vernalPool$pctAirTemp=vernalPool$Air.Temp..c./vernalPool$maxAirTemp
+vernalPool$pctWaterTemp=vernalPool$Water.Temp..c./vernalPool$maxWaterTemp
+
+####################General Graphing Functions and preparation#############################################
+graphingFrame=data.frame(date=vernalPool$Date, pool=vernalPool$uniqPoolID,diameter=vernalPool$pctDiam, 
+                         depth=vernalPool$pctDepth, airTemp=vernalPool$pctAirTemp, 
+                         waterTemp=vernalPool$pctWaterTemp, julian=vernalPool$Julian, year=vernalPool$Year)
+attach(graphingFrame)
+sorted=graphingFrame[order(julian),]
+allDates=unique(sorted$julian)
+allYears=as.character(unique(sorted$year))
+
+numPools=length(unique(sorted$pool))
+numObs=length(sorted$pool)
+numYears=length(unique(sorted$year))
+
+equinoxDates=data.frame(julian=c(79,266), type=c("Spring Equinox","Fall Equinox"))
+equinoxDates$type <- factor(equinoxDates$type, levels=c("Spring Equinox","Fall Equinox"))
+
+# equinoxDates=data.frame(julian=c(79,171,266), type=c("Spring Equinox","Summer Solstice","Fall Equinox"))
+# equinoxDates$type <- factor(equinoxDates$type, levels=c("Spring Equinox", "Summer Solstice","Fall Equinox"))
+
+overviewInfo <- function(data, timeColumn, dataColumn, allDates){
+  allAverages=c()
+  for (time in allDates){
+    allVals=subset(data, data[timeColumn][[1]]==time)[dataColumn][[1]]
+    avg=mean(allVals, na.rm=TRUE)
+    allAverages=c(allAverages,avg)
+  }
+  return(allAverages)
+}
+
+###################### Pool Diameter by Julian Date ############################
+
+diameterAverages=overviewInfo(graphingFrame,"julian", "diameter",allDates)
+overallAvgDiam=data.frame(julDate=allDates, values=diameterAverages)
+
+#Smoothed Line
+graph1=ggplot() +
+  stat_smooth(data=overallAvgDiam, aes(x=julDate, y=values)) +
+  geom_point(data=overallAvgDiam, aes(x=julDate, y=values), color="grey40", alpha=.95) +
+  guides(alpha=FALSE)+
+  scale_y_continuous(limits=c(0, 1.15)) +
+  scale_x_continuous(limits=c(0, 360)) +
+  geom_vline(data=equinoxDates, aes(xintercept=julian, color=type), size=3, alpha=.6) +
+  scale_color_manual(values=c("green", "red")) +
+  annotate("text", x = 180, y = 1.15, label = paste0("Number of Pools: ", numPools)) +
+  annotate("text", x = 180, y = 1.1, label = paste0("Number of Observations: ",numObs))+
+  annotate("text", x = 180, y = 1.05, label = paste0("Number of Years: ",numYears))+
+  labs(title="Overall Average Pool Diameter by Julian Date", x ="Julian Date", y="Diameter/Max Diameter", color="")
+#ggsave(graph1, filename = "diameterOverall.png")
+graph1
+
+###################### Pool Diameter by Real Date ############################
+
+diameterYearlyAverages=overviewInfo(graphingFrame, "date", "diameter", unique(graphingFrame$date))
+overallYearlyAvgDiam=data.frame(date=unique(graphingFrame$date), values=diameterYearlyAverages)
+
+#Smoothed Line
+graph1=ggplot() +
+  stat_smooth(data=overallYearlyAvgDiam, aes(x=date, y=values), span=.1) +
+  geom_point(data=overallYearlyAvgDiam, aes(x=date, y=values), color="grey40", alpha=.95) +
+  guides(alpha=FALSE)+
+  scale_y_continuous(limits=c(0, 1.15)) +
+  #scale_x_continuous(limits=c(0, 360)) +
+  # geom_vline(data=equinoxDates, aes(xintercept=julian, color=type), size=3, alpha=.6) +
+  # scale_color_manual(values=c("green", "red")) +
+  annotate("text", x = as.Date("2006-01-01"), y = 1.15, label = paste0("Number of Pools: ", numPools)) +
+  annotate("text", x = as.Date("2006-01-01"), y = 1.1, label = paste0("Number of Observations: ",numObs))+
+  annotate("text", x = as.Date("2006-01-01"), y = 1.05, label = paste0("Number of Years: ",numYears))+
+  labs(title="Overall Average Pool Diameter by Julian Date", x ="Julian Date", y="Diameter/Max Diameter", color="")
+#ggsave(graph1, filename = "diameterOverall.png")
+graph1
+
+###################### Percent Pool Depth by Julian Date ############################
+
+depthAverages=overviewInfo(graphingFrame,"julian", "depth",allDates)
+overallAvgDepth=data.frame(julDate=allDates, values=depthAverages)
+
+#Smoothed Line
+graph1=ggplot() +
+  stat_smooth(data=overallAvgDepth, aes(x=julDate, y=values)) +
+  geom_point(data=overallAvgDepth, aes(x=julDate, y=values), color="grey40", alpha=.95) +
+  guides(alpha=FALSE)+
+  scale_y_continuous(limits=c(0, 1.15)) +
+  scale_x_continuous(limits=c(0, 360)) +
+  geom_vline(data=equinoxDates, aes(xintercept=julian, color=type), size=3, alpha=.6) +
+  scale_color_manual(values=c("green", "red")) +
+  annotate("text", x = 180, y = 1.15, label = paste0("Number of Pools: ", numPools)) +
+  annotate("text", x = 180, y = 1.1, label = paste0("Number of Observations: ",numObs))+
+  annotate("text", x = 180, y = 1.05, label = paste0("Number of Years: ",numYears))+
+  labs(title="Overall Average Pool Depth by Julian Date", x ="Julian Date", y="Depth (cm)")
+#ggsave(graph1, filename = "depthOverall.png")
+graph1
+
+###################### Percent Air Temp by Julian Date ############################
+
+airAverages=overviewInfo(graphingFrame,"julian", "airTemp",allDates)
+overallAvgAir=data.frame(julDate=allDates, values=airAverages)
+
+#Smoothed Line
+graph1=ggplot() +
+  stat_smooth(data=overallAvgAir, aes(x=julDate, y=values)) +
+  geom_point(data=overallAvgAir, aes(x=julDate, y=values), color="grey40", alpha=.95) +
+  guides(alpha=FALSE)+
+  scale_y_continuous(limits=c(0, 1.15)) +
+  scale_x_continuous(limits=c(0, 360)) +
+  geom_vline(data=equinoxDates, aes(xintercept=julian, color=type), size=3, alpha=.6) +
+  scale_color_manual(values=c("green", "red")) +
+  annotate("text", x = 180, y = 1.15, label = paste0("Number of Pools: ", numPools)) +
+  annotate("text", x = 180, y = 1.1, label = paste0("Number of Observations: ",numObs))+
+  annotate("text", x = 180, y = 1.05, label = paste0("Number of Years: ",numYears))+
+  labs(title="Overall Average Air Temperature by Julian Date", x ="Julian Date", y="Air Temp/Max Air Temp")
+#ggsave(graph1, filename = "airTempOverall.png")
+graph1
+
+###################### Percent Air Temp by Real Date ###################
+airTempYearlyAverages=overviewInfo(graphingFrame, "date", "airTemp", unique(graphingFrame$date))
+overallYearlyAvgAirTemp=data.frame(date=unique(graphingFrame$date), values=airTempYearlyAverages)
+
+#Smoothed Line
+graph1=ggplot() +
+  stat_smooth(data=overallYearlyAvgDiam, aes(x=date, y=values), span=.1) +
+  geom_point(data=overallYearlyAvgAirTemp, aes(x=date, y=values), color="grey40", alpha=.95) +
+  guides(alpha=FALSE)+
+  scale_y_continuous(limits=c(0, 1.15)) +
+  #scale_x_continuous(limits=c(0, 360)) +
+  # geom_vline(data=equinoxDates, aes(xintercept=julian, color=type), size=3, alpha=.6) +
+  # scale_color_manual(values=c("green", "red")) +
+  annotate("text", x = as.Date("2006-01-01"), y = 1.15, label = paste0("Number of Pools: ", numPools)) +
+  annotate("text", x = as.Date("2006-01-01"), y = 1.1, label = paste0("Number of Observations: ",numObs))+
+  annotate("text", x = as.Date("2006-01-01"), y = 1.05, label = paste0("Number of Years: ",numYears))+
+  labs(title="Overall Average Pool Diameter by Julian Date", x ="Julian Date", y="Diameter/Max Diameter", color="")
+#ggsave(graph1, filename = "diameterOverall.png")
+graph1
+
+###################### Percent Water Temp by Julian Date ############################
+
+waterAverages=overviewInfo(graphingFrame,"julian", "waterTemp",allDates)
+overallAvgWater=data.frame(julDate=allDates, values=waterAverages)
+
+#Smoothed Line
+graph1=ggplot() +
+  stat_smooth(data=overallAvgWater, aes(x=julDate, y=values)) +
+  geom_point(data=overallAvgWater, aes(x=julDate, y=values), color="grey40", alpha=.95) +
+  guides(alpha=FALSE)+
+  scale_y_continuous(limits=c(0, 1.15)) +
+  scale_x_continuous(limits=c(0, 360)) +
+  geom_vline(data=equinoxDates, aes(xintercept=julian, color=type), size=3, alpha=.6) +
+  scale_color_manual(values=c("green", "red")) +
+  annotate("text", x = 180, y = 1.15, label = paste0("Number of Pools: ", numPools)) +
+  annotate("text", x = 180, y = 1.1, label = paste0("Number of Observations: ",numObs))+
+  annotate("text", x = 180, y = 1.05, label = paste0("Number of Years: ",numYears))+
+  labs(title="Overall Average Water Temperature by Julian Date", x ="Julian Date", y="Water Temp/Max Water Temp",
+       color="")
+#ggsave(graph1, filename = "waterTempOverall.png")
+graph1
+
+###################### All Smooth Lines ############################
+
+allLines=data.frame(julDate=rep(overallAvgAir$julDate, 4), 
+                    values=c(overallAvgAir$values, overallAvgWater$values, overallAvgDepth$values, overallAvgDiam$values),
+                    measure=c(rep("Air Temp", nrow(overallAvgAir)), rep("Water Temp", nrow(overallAvgWater)),
+                              rep("Pool Depth", nrow(overallAvgDepth)), rep("Pool Diameter", nrow(overallAvgDiam))))
+
+graph1=ggplot() +
+  stat_smooth(data=allLines, aes(x=julDate, y=values, color=measure, fill=measure), size=2) +
+  scale_y_continuous(limits=c(0, 1.15)) +
+  scale_x_continuous(limits=c(0, 360)) +
+  geom_vline(data=equinoxDates, aes(xintercept=julian, alpha=type), size=3) +
+  scale_color_manual(values=c( "skyblue","orange", "deeppink","seagreen"), 
+                     breaks=c("Air Temp", "Water Temp", "Pool Depth", "Pool Diameter")) +
+  scale_alpha_manual(values=c(.4,.6))+
+  scale_fill_manual(values=c("skyblue","orange", "deeppink","seagreen"),
+                    breaks=c("Air Temp", "Water Temp", "Pool Depth", "Pool Diameter")) +
+  annotate("text", x = 180, y = 1.15, label = paste0("Number of Pools: ", numPools)) +
+  annotate("text", x = 180, y = 1.1, label = paste0("Number of Observations: ",numObs))+
+  annotate("text", x = 180, y = 1.05, label = paste0("Number of Years: ",numYears))+
+  labs(title="All Vernal Pool Measurements", x ="Julian Date", y="Percent of Max Value",
+       alpha='')
+ggsave(filename="vernalPool.png", plot=graph1)
+graph1
+  
+
+###################### Percent Pool Diameter by Air Temp #############
+
+tempFrame=data.frame(airTemp=round(graphingFrame$airTemp, 2), diameter=graphingFrame$diameter)
+allTemps=unique(tempFrame$airTemp)
+
+diamByTemp=overviewInfo(tempFrame, "airTemp", "diameter", allTemps)
+diamByTempFrame=data.frame(temp=allTemps, values=diamByTemp)
+
+graph1=ggplot() +
+  stat_smooth(data=diamByTempFrame, aes(x=temp, y=values)) +
+  geom_point(data=diamByTempFrame, aes(x=temp, y=values), color="grey40", alpha=.95) +
+  guides(alpha=FALSE)+
+  scale_y_continuous(limits=c(0, 1.15)) +
+  scale_x_continuous(limits=c(0, 1)) +
+  annotate("text", x = .5, y = 1.15, label = paste0("Number of Pools: ", numPools)) +
+  annotate("text", x = .5, y = 1.1, label = paste0("Number of Observations: ",numObs))+
+  annotate("text", x = .5, y = 1.05, label = paste0("Number of Years: ",numYears))+
+  labs(title="Overall Average Pool Diameter by Temperature", x ="Temp (pct of max)", y="Pool Diameter/Max Pool Diameter",
+       color="")
+#ggsave(graph1, filename = "diameterByTemp.png")
+graph1
+
+
+
+############################################
+###### Streams Data ####################
+############################################
+
+################# Formatting ################
+
+#read in the vernal pool data
+streams=read.csv("../streams.csv")
+
+
+#Get year as an identifier
+streams$Date=as.Date(streams$Date)
+streams$Year=format(streams$Date, "%Y")
+
+#give a unique identifier to each location
+streams$teacherNum=as.numeric(as.factor(streams$Teacher))
+streams$uniqLocationID=(streams$teacherNum*100 + streams$Location)
+
+
+
+#get max values of depth, air temp, and water temp
+
+maxVals <- function(data, variable, group){
+  maxes=c()
+  for (i in 1:nrow(data)){
+    maxes=c(maxes,max(subset(data, data[group][[1]] == data[i,][group][[1]])[variable][[1]], na.rm=TRUE))
+  }
+  return(maxes)
+}
+
+streams$maxDepth=maxVals(streams, "Depth..cm.", "uniqLocationID")
+streams$maxAirTemp=maxVals(streams, "Air.Temp..c.", "uniqLocationID")
+streams$maxWaterTemp=maxVals(streams, "Water.Temp..c.", "uniqLocationID")
+
+#get percentages of all variables
+streams$pctDepth=streams$Depth..cm./streams$maxDepth
+streams$pctAirTemp=streams$Air.Temp..c./streams$maxAirTemp
+streams$pctWaterTemp=streams$Water.Temp..c./streams$maxWaterTemp
+
+####################General Graphing Functions and preparation ######################
+
+graphingFrame=data.frame(date=streams$Date, location=streams$uniqLocationID, 
+                         depth=streams$pctDepth, airTemp=streams$pctAirTemp, waterTemp=streams$pctWaterTemp, 
+                         flow=streams$Flow.Rate, julian=streams$Julian, year=streams$Year)
+
+attach(graphingFrame)
+sorted=graphingFrame[order(julian),]
+allDates=unique(sorted$julian)
+allYears=as.character(unique(sorted$year))
+
+numLocs=length(unique(sorted$location))
+numObs=length(sorted$location)
+numYears=length(unique(sorted$year))
+
+equinoxDates=data.frame(julian=c(79,266), type=c("Spring Equinox","Fall Equinox"))
+equinoxDates$type <- factor(equinoxDates$type, levels=c("Spring Equinox","Fall Equinox"))
+
+# equinoxDates=data.frame(julian=c(79,171,266), type=c("Spring Equinox","Summer Solstice","Fall Equinox"))
+# equinoxDates$type <- factor(equinoxDates$type, levels=c("Spring Equinox", "Summer Solstice","Fall Equinox"))
+
+overviewInfo <- function(data, timeColumn, dataColumn, allDates){
+  allAverages=c()
+  for (time in allDates){
+    allVals=subset(data, data[timeColumn][[1]]==time)[dataColumn][[1]]
+    avg=mean(allVals, na.rm=TRUE)
+    allAverages=c(allAverages,avg)
+  }
+  return(allAverages)
+}
+
+###################### Percent Pool Depth by Julian Date ############################
+
+depthAverages=overviewInfo(graphingFrame,"julian", "depth",allDates)
+overallAvgDepth=data.frame(julDate=allDates, values=depthAverages)
+
+#Smoothed Line
+graph1=ggplot() +
+  stat_smooth(data=overallAvgDepth, aes(x=julDate, y=values)) +
+  geom_point(data=overallAvgDepth, aes(x=julDate, y=values), color="grey40", alpha=.95) +
+  guides(alpha=FALSE)+
+  scale_y_continuous(limits=c(0, 1.15)) +
+  scale_x_continuous(limits=c(0, 360)) +
+  annotate("text", x = 180, y = 1.15, label = paste0("Number of Locations: ", numLocs)) +
+  annotate("text", x = 180, y = 1.1, label = paste0("Number of Observations: ",numObs))+
+  annotate("text", x = 180, y = 1.05, label = paste0("Number of Years: ",numYears))+
+  labs(title="Overall Average Stream Depth by Julian Date", x ="Julian Date", y="Depth (percent of max)")
+#ggsave(graph1, filename = "streamDepthOverall.png")
+graph1
+
+###################### Percent Pool Depth by Julian Date ############################
+
+flowAverages=overviewInfo(graphingFrame,"julian", "flow",allDates)
+overallAvgFlow=data.frame(julDate=allDates, values=flowAverages)
+
+#Smoothed Line
+graph1=ggplot() +
+  stat_smooth(data=overallAvgFlow, aes(x=julDate, y=values)) +
+  geom_point(data=overallAvgFlow, aes(x=julDate, y=values), color="grey40", alpha=.95) +
+  guides(alpha=FALSE)+
+  scale_y_continuous(limits=c(0, 5)) +
+  scale_x_continuous(limits=c(0, 360)) +
+  annotate("text", x = 180, y = 5, label = paste0("Number of Locations: ", numLocs)) +
+  annotate("text", x = 180, y = 4.9, label = paste0("Number of Observations: ",numObs))+
+  annotate("text", x = 180, y = 4.8, label = paste0("Number of Years: ",numYears))+
+  labs(title="Overall Average Stream Depth by Julian Date", x ="Julian Date", y="Depth (percent of max)")
+#ggsave(graph1, filename = "streamDepthOverall.png")
+graph1
+
+############################################
+###### Changing Forests Data ####################
+############################################
+
+################# Formatting ################
+
+#read in the vernal pool data
+forests=read.csv("../changing_forests.csv")
+
+#read in the species code info
+speciesCodes=read.csv("../species_codes.csv")
+
+
+#Get year as an identifier
+forests$Date=as.Date(forests$Date)
+forests$Year=format(forests$Date, "%Y")
+
+#give a unique identifier to each location and tree
+forests$teacherNum=as.numeric(as.factor(forests$Teacher))
+forests$uniqPlotID=(forests$teacherNum*100 + forests$Plot)
+forests$uniqTreeID=(forests$uniqPlotID*10)+forests$Tree.ID
+
+
+vec <- c()
+for (i in seq(1,length(forests$Species.Code))){
+  tryCatch(vec[i] <- (which(speciesCodes$Species.Code==as.character(forests$Species.Code[i]))), 
+           error=function(e){vec[i] <- 89})
+}
+
+#Assign Scientific names to each tree
+SciNames = as.character(speciesCodes[vec,3])
+splitNames=strsplit(SciNames, " ")
+genusVec = c()
+speciesVec=c()
+for(i in seq(1,length(splitNames))){
+  genusVec[i]=splitNames[i][[1]][1]
+  speciesVec[i]=splitNames[i][[1]][2]
+}
+forests$genus = genusVec
+forests$species = speciesVec
+
+
+
+#get max values of depth, air temp, and water temp
+
+maxVals <- function(data, variable, group){
+  maxes=c()
+  for (i in 1:nrow(data)){
+    maxes=c(maxes,max(subset(data, data[group][[1]] == data[i,][group][[1]])[variable][[1]], na.rm=TRUE))
+  }
+  return(maxes)
+}
+
+streams$maxDepth=maxVals(streams, "Depth..cm.", "uniqLocationID")
+streams$maxAirTemp=maxVals(streams, "Air.Temp..c.", "uniqLocationID")
+streams$maxWaterTemp=maxVals(streams, "Water.Temp..c.", "uniqLocationID")
+
+#get percentages of all variables
+streams$pctDepth=streams$Depth..cm./streams$maxDepth
+streams$pctAirTemp=streams$Air.Temp..c./streams$maxAirTemp
+streams$pctWaterTemp=streams$Water.Temp..c./streams$maxWaterTemp
+
+
