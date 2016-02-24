@@ -126,7 +126,6 @@ graph2=ggplot() +
   labs(x="Year", y="# Of Days", title="Leaves On Days, Overall")
 graph2
 
-
 ################### Graph By Site ############################
 
 #Set up data frame
@@ -229,7 +228,6 @@ graph2=ggplot() +
   geom_abline(slope=coefRM[2], intercept=coefRM[1])
 graph2
 
-
 ####Best Species####
 allSpecs=as.character(unique(summaryData$speciesCode))
 numTrees=data.frame(tree=allSpecs, numInds=rep(0, length(allSpecs)))
@@ -244,7 +242,6 @@ numTrees$tree=as.character(numTrees$tree)
 
 bestTrees=subset(numTrees, numInds>=90)$tree
 
-
 ####Best Towns####
 allTowns=as.character(unique(summaryData$town))
 numTowns=data.frame(town=allTowns, numInds=rep(0, length(allTowns)))
@@ -258,7 +255,6 @@ numTowns=numTowns[order(-numTowns$numInds),]
 numTowns$town=as.character(numTowns$town)
 
 bestTowns=subset(numTowns, numInds>=100)$town
-
 
 
 ################### USER-DEFINED GRAPHING ##################
@@ -277,7 +273,6 @@ speciesCode <- c(NA)
 #SELECT GRAPH TYPE#
 #The x-axis will be years. Pick a category from above for the y axis
 yAxis="town"
-
 
 ########                          ########
 ### Run everything below to see graphs ###
