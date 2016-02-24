@@ -11,6 +11,7 @@ library(ggplot2)
 #install.packages("extrafont")
 library(extrafont)
 font_import(pattern="[A/a]rial")
+library(ggmap)
 
 ################# Format Data ####################
 #read background data - school info and species info
@@ -90,8 +91,8 @@ overviewInfo <- function(data, timeColumn, dataColumn, allDates){
 
 allYears=unique(summaryData$year)
 
-# budsOnly=subset(summaryData, variable=="bud")
-# leavesOnly=subset(summaryData, variable=="leaf")
+ budsOnly=subset(summaryData, variable=="bud")
+ leavesOnly=subset(summaryData, variable=="leaf")
 
 
 ################## Overall Data Graph ########################
@@ -155,6 +156,40 @@ for (i in allTowns){
 }
 siteFrame$leafFall=leafFallVec
 
+siteFrame$leavesOnDays <- siteFrame$leafFall - siteFrame$budBurst
+siteFrame$year=as.numeric(as.character(siteFrame$year))
+
+varVec=c()
+interceptVec=c()
+slopeVec=c()
+r2Vec=c()
+nNumVec=c()
+latVec = c()
+lonVec = c
+for (i in allTowns){
+  thisFrame=subset(siteFrame, town==i) 
+  if(length(subset(thisFrame, is.na(leavesOnDays))$leavesOnDays) != length(thisFrame$leavesOnDays)){
+    varVec <- c(varVec, i)
+    thisModel <- lm(thisFrame$leavesOnDays~as.numeric(thisFrame$year), na.action=na.omit)
+    thisCoef <- coef(thisModel)
+    thisR2 <- round(summary(thisModel)$r.squared, digits=4)
+    thisNNum <-  length(which(thisFrame$leavesOnDays != "NaN"))
+    thisLat <- summaryData[which(summaryData$town ==i),][1,]$lat
+    thisLon <- summaryData[which(summaryData$town ==i),][1,]$lon
+    interceptVec <- c(interceptVec, as.numeric(thisCoef[1]))
+    slopeVec <- c(slopeVec, as.numeric(thisCoef[2]))
+    r2Vec <- c(r2Vec, thisR2)
+    nNumVec <- c(nNumVec,thisNNum)
+    latVec <- c(latVec, thisLat)
+    lonVec <- c(lonVec, thisLon)
+  }
+}
+modelFrame=data.frame(var=varVec, intercept=interceptVec, slope=slopeVec,r2=r2Vec, nNum=nNumVec)
+modelFrame$lat=as.numeric(latVec)
+modelFrame$lon=as.numeric(as.character(lonVec))[2:length(lonVec)]
+
+modelFrame$lat=summaryData[which(summaryData$town ==modelFrame$var),][1,]$lat
+
 graph1=ggplot()+
   geom_line(data=siteFrame, aes(x=year, y=budBurst, group=town, color=town)) +
   geom_point(data=siteFrame, aes(x=year, y=budBurst, color=town), size=2) +
@@ -163,6 +198,12 @@ graph1=ggplot()+
   labs(x="Year", y="Julian Day", title="Yearly Bud Burst and Leaf Fall by Town") +
   scale_y_continuous(breaks=seq(100,320,10), minor_breaks=NULL)
 graph1
+
+mapString=ggmap(get_map(location="Massachusetts", zoom=9, source="stamen", maptype="terrain-background", color="bw"), extent = "device")
+map1=mapString+
+  geom_point(data=modelFrame, aes(x=lon, y=lat, color=slope, size=nNum)) + #, alpha=.01,na.rm=TRUE)+
+  scale_color_gradient(low="blue", high="red")
+  
 
 ################### Graph By Species ############################
 
@@ -260,13 +301,12 @@ numTowns$town=as.character(numTowns$town)
 bestTowns=subset(numTowns, numInds>=100)$town
 
 
-
 ################### USER-DEFINED GRAPHING ##################
 
 
 #SELECT SITES OF INTEREST#
 #pick up to two area identifiers. If left blank, all will be included
-town <- c("Ashburnham","Pittsfield")
+town <- c(NA)
 school <- c(NA)
 
 ##Pick one type of species identifier, and list as many as you want. If left blank, all will be included
@@ -329,6 +369,7 @@ varVec=c()
 interceptVec=c()
 slopeVec=c()
 r2Vec=c()
+nNumVec=c()
 for (i in allVars){
   thisFrame=subset(siteFrame, y==i) 
   if(length(subset(thisFrame, is.na(leavesOnDays))$leavesOnDays) != length(thisFrame$leavesOnDays)){
@@ -336,12 +377,14 @@ for (i in allVars){
     thisModel <- lm(thisFrame$leavesOnDays~as.numeric(thisFrame$year), na.action=na.omit)
     thisCoef <- coef(thisModel)
     thisR2 <- round(summary(thisModel)$r.squared, digits=4)
+    thisNNum <-  length(which(thisFrame$leavesOnDays != "NaN"))
     interceptVec <- c(interceptVec, as.numeric(thisCoef[1]))
     slopeVec <- c(slopeVec, as.numeric(thisCoef[2]))
     r2Vec <- c(r2Vec, thisR2)
+    nNumVec <- c(nNumVec,thisNNum)
   }
 }
-modelFrame=data.frame(var=varVec, intercept=interceptVec, slope=slopeVec,r2=r2Vec)
+modelFrame=data.frame(var=varVec, intercept=interceptVec, slope=slopeVec,r2=r2Vec, nNum=nNumVec)
 
 avgBudBurst=overviewInfo(budsOnly, "year", "value", allYears)
 avgLeafFall=overviewInfo(leavesOnly, "year", "value", allYears)
@@ -355,12 +398,6 @@ graphingFrame$year=as.numeric(as.character(graphingFrame$year))
 overallModel <- lm(formula = leavesOnDays ~ as.numeric(allYears), na.action=na.omit)
 coefOverall <- coef(overallModel)
 rsquareOverall=round(summary(overallModel)$r.squared, digits=4)
-
-
-# splitModel <- lm(formula = leavesOnDays ~ x, data=graphingFrame, na.action=na.omit)
-# coefSplit <- coef(splitModel)
-# rsquareSplit=round(summary(splitModel)$r.squared, digits=4)
-
 
 
 title1="Yearly Bud Burst and Leaf Fall"
@@ -405,7 +442,7 @@ graph4=ggplot() +
   geom_line(data=subset(graphingFrame, group == "Leaves On Days"), aes(x=year, y=value, group=group, color=group))+
   geom_point(data=subset(graphingFrame, group == "Leaves On Days"), aes(x=year, y=value, color=group)) +
   geom_abline(aes(slope=coefOverall[2], intercept=coefOverall[1], linetype="linear Leaves On Days"))+
-  annotate("text", x=2015, y=153, label=paste("R^2:", rsquareSplit)) +
+  annotate("text", x=2015, y=153, label=paste("R^2:", rsquareOverall)) +
   labs(x="Year", y="# Of Days", color="", linetype="") +
   ggtitle(bquote(atop(.(title4), atop(italic(.(dataInfo)), ""))))   +
   scale_y_continuous(breaks=seq(150,180,5), minor_breaks=NULL) +
