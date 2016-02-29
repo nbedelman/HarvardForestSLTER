@@ -11,8 +11,8 @@
 #######################################################
 
 #uncomment install lines if packages not yet installed
-install.packages("ggplot2")
-install.packages("reshape2")
+#install.packages("ggplot2")
+#install.packages("reshape2")
 library("ggplot2")
 library("reshape2")
 
@@ -23,14 +23,16 @@ library("reshape2")
 ################### Formatting ########################
 
 #read in the fall phenology data
-fallPheno=read.csv("../fall_phenology.csv")
+fallPheno=read.csv("data/fall_phenology.csv")
 
 #read in the species code info
-speciesCodes=read.csv("../species_codes.csv")
+speciesCodes=read.csv("data/species_codes.csv")
 
 #give a unique identifier to each tree
 fallPheno$schoolNum=as.numeric(as.factor(fallPheno$School.Code))
-fallPheno$uniqTreeID=(fallPheno$schoolNum*100 + fallPheno$Tree.ID)
+#In case schools accidentally gave the same ID to different trees of different species
+fallPheno$speciesNum=as.numeric(as.factor(fallPheno$Species.Code))
+fallPheno$uniqTreeID=(fallPheno$schoolNum*100 + fallPheno$Tree.ID+fallPheno$speciesNum)
 
 #Get year as an identifier
 fallPheno$Date=as.Date(fallPheno$Date)
@@ -57,6 +59,44 @@ fallPheno$species = speciesVec
 fallPheno$Tree.Color=as.numeric(as.character(fallPheno$Tree.Color))
 
 #Get Fallen leaves as a percentage of total leaves
+#First, correct the entries that were put in incorrectly. these were all done by TCS Donnelly, and they should all have a total of 12 leaves
+for (i in seq(1, nrow(fallPheno))){
+  if(is.na(fallPheno[i,]$Fallen.Leaves)){
+    fallPheno[i,]$Fallen.Leaves = 0
+  }
+  if(is.na(fallPheno[i,]$Total.Leaves)){
+    fallPheno[i,]$Total.Leaves = 0
+  }
+  if(fallPheno[i,]$Total.Leaves < fallPheno[i,]$Fallen.Leaves){
+    fallPheno[i,]$Fallen.Leaves = fallPheno[i,]$Total.Leaves
+    fallPheno[i,]$Total.Leaves = 12
+  }
+}
+
+#some trees were recorded as never having lost leaves. These should be removed.
+neverFellTeacher <- c()
+neverFellTreeID <- c()
+neverFellTree <- c()
+neverFellYear <- c()
+for (i in unique(fallPheno$uniqTreeID)){
+  singleTree <- subset(fallPheno, uniqTreeID==i)
+  for (j in unique(singleTree$Year)){
+    singleYear <- subset(singleTree, Year==j)
+    if (max(singleYear$Fallen.Leaves) == 0 & max(singleYear$Total.Leaves)>0 ){
+      neverFellTree <- c(neverFellTree, i)
+      neverFellYear <- c(neverFellYear, j)
+      neverFellTeacher <- c(neverFellTeacher, as.character(unique(singleYear$Teacher)))
+      neverFellTreeID <- c(neverFellTreeID, unique(singleYear$Tree.ID))
+    }
+  }
+}
+
+unWantedRows <- c()
+for (i in seq(1,length(neverFellTree))){
+  unWantedRows <- c(unWantedRows, which(fallPheno$uniqTreeID==neverFellTree[i] & fallPheno$Year == neverFellYear[i]))
+}
+
+# fallPheno <- fallPheno[-unWantedRows,]
 fallPheno$pctFallen=fallPheno$Fallen.Leaves/fallPheno$Total.Leaves
 
 ############# GRAPHING ######################
@@ -85,9 +125,9 @@ overviewInfo <- function(data, column, allDates){
 
 ######################fallen leaves as percent of total leaves, by Julian date,##############################
 
-correctlyDone=subset(sorted, pctFallen <=1)
+#correctlyDone=subset(sorted, pctFallen <=1)
 
-fallenAverages=overviewInfo(correctlyDone,"pctFallen",allDates)
+fallenAverages=overviewInfo(sorted,"pctFallen",allDates)
 overallAvgFallen=data.frame(julDate=allDates, values=fallenAverages)
 
 #Smoothed Line
@@ -185,7 +225,7 @@ f <- function(index,genusList, dateList, column){
 
 ######################fallen leaves as percent of total leaves, by Julian date, by Genus######################
 
-correctlyDone=subset(sorted, pctFallen <=1)
+#correctlyDone=subset(sorted, pctFallen <=1)
 
 for (i in 1:length(allGenera)){
   byGenusFrame[i+1] <- f(i,allGenera,allDates, "pctFallen")

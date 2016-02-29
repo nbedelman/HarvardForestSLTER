@@ -6,7 +6,7 @@ library(ggplot2)
 #install.packages("extrafont")
 library(extrafont)
 font_import(pattern="[A/a]rial")
-
+library(plyr)
 #############FORMAT SCHOOLYARD DATA########################
 #read background data - school info and species info
 
@@ -26,7 +26,12 @@ budBurst$uniqTreeID=(budBurst$schoolNum*100 + budBurst$tree)*10+1 #spring data e
 ######### read and format leaf fall
 leafFall=read.csv("data/50p_leafFall.csv", col.names = c("school", "teacher", "year", "tree", "speciesCode", "leafFall"),
                   colClasses = c("character","character","numeric","numeric","character","numeric"))
+unWantedRows <- c()
+for (i in seq(1,length(neverFellTreeID))){
+  unWantedRows <- c(unWantedRows, which(leafFall$tree==neverFellTreeID[i] & leafFall$year == neverFellYear[i] & leafFall$teacher==neverFellTeacher[i]))
+}
 
+leafFall <- leafFall[-unWantedRows,]
 #give a unique identifier to each tree
 leafFall$schoolNum=as.numeric(as.factor(leafFall$school))
 leafFall$uniqTreeID=(leafFall$schoolNum*100 + leafFall$tree)*10+2 #fall data ends with 2
@@ -70,6 +75,12 @@ summaryData$town <- as.character(schoolInfo[locVec,5])
 summaryData$lat <- as.character(schoolInfo[locVec,7])
 summaryData$lon <- as.character(schoolInfo[locVec,8])
 summaryData$elev <- as.character(schoolInfo[locVec,9])
+summaryData$set <- rep("Schoolyard",nrow(summaryData))
+
+
+importantColumns <- c("year","uniqTreeID", "value", "variable", "speciesCode", "species","genus", "set")
+summaryDataSchool <- summaryData[importantColumns]
+summaryDataSchool <-rename(summaryDataSchool, c("uniqTreeID"="treeID", "speciesCode"="code"))
 
 #############FORMAT John O'Keefe Data##################
 johnTreeInfo=read.csv("data/hf003-01-plant.csv")
@@ -253,4 +264,123 @@ for (i in seq(1,length(treeIDs))){
   johnFallSummary$genus[i] <-  as.character(johnFallSelect[row,5])
 }
 
-JohnSummary <- data.frame()
+#Combine the fall and spring data into a single data frame
+JohnSummary <- rbind(johnFallSummary, johnSpringSummary)
+JohnSummary$set <- rep("OKeefe", nrow(JohnSummary))
+
+####################Combine John and Schoolyard Data################
+totalSummary <- rbind(JohnSummary, summaryDataSchool)
+
+################ Graphing Functions ################
+
+overviewInfo <- function(data, timeColumn, dataColumn, allDates){
+  allAverages=c()
+  for (time in allDates){
+    allVals=subset(data, data[timeColumn][[1]]==time)[dataColumn][[1]]
+    avg=mean(allVals, na.rm=TRUE)
+    allAverages=c(allAverages,avg)
+  }
+  return(allAverages)
+}
+
+allYears=unique(totalSummary$year)
+
+budsOnlySchool=subset(totalSummary, variable=="bud" & set=="Schoolyard")
+leavesOnlySchool=subset(totalSummary, variable=="leaf" & set=="Schoolyard")
+budsOnlyJohn=subset(totalSummary, variable=="bud" & set=="OKeefe")
+leavesOnlyJohn=subset(totalSummary, variable=="leaf" & set=="OKeefe")
+
+################## Overall Data Graph ########################
+
+avgBudBurstSchool=overviewInfo(budsOnlySchool, "year", "value", allYears)
+avgLeafFallSchool=overviewInfo(leavesOnlySchool, "year", "value", allYears)
+avgBudBurstJohn=overviewInfo(budsOnlyJohn, "year", "value", allYears)
+avgLeafFallJohn=overviewInfo(leavesOnlyJohn, "year", "value", allYears)
+
+graphingFrame=data.frame(x=rep(as.numeric(allYears), 2), budBurst=c(avgBudBurstSchool, avgBudBurstJohn), 
+                         leafFall= c(avgLeafFallSchool, avgLeafFallJohn), group=c(rep("Schoolyard", length(allYears)), rep("OKeefe", length(allYears))))
+
+
+graph1=ggplot()+
+  geom_line(data=graphingFrame, aes(x=x, y=budBurst, group=group, color=group)) +
+  geom_point(data=graphingFrame, aes(x=x, y=budBurst), size=2) +
+  geom_line(data=graphingFrame, aes(x=x, y=leafFall, group=group, color=group)) +
+  geom_point(data=graphingFrame, aes(x=x, y=leafFall), size=2) +  
+  labs(x="Year", y="Julian Day", title="Yearly Bud Burst and Leaf Fall") +
+  scale_y_continuous(breaks=seq(100,320,10), minor_breaks=NULL) +
+  scale_x_continuous(limits=c(2004, 2015))
+graph1
+
+
+graphingFrame$leavesOnDays=graphingFrame$leafFall-graphingFrame$budBurst
+
+model <- lm(formula = leavesOnDays ~ x, data=graphingFrame, na.action=na.omit)
+coefRM <- coef(model)
+rsquare=round(summary(model)$r.squared, digits=4)
+
+graph2=ggplot() + 
+  geom_line(data=graphingFrame, aes(x=x, y=leavesOnDays, group=group, color=group))+
+  geom_point(data=graphingFrame, aes(x=x, y=leavesOnDays)) +
+  scale_x_continuous(limits=c(2005, 2015), breaks=seq(2005, 2015, 1)) +
+  #geom_abline(slope=coefRM[2], intercept=coefRM[1])+
+  #annotate("text", x=2015, y=153, label=paste("R^2:", rsquare))
+  labs(x="Year", y="# Of Days", title="Leaves On Days, Overall")
+graph2
+
+##################Red Oak, Red Maple ########################
+
+budsOnlySchoolRM <- subset(budsOnlySchool, code == "RM")
+budsOnlySchoolRO <- subset(budsOnlySchool, code == "RO")
+leavesOnlySchoolRM <- subset(leavesOnlySchool, code == "RM")
+leavesOnlySchoolRO <- subset(leavesOnlySchool, code == "RO")
+budsOnlyJohnRM <- subset(budsOnlyJohn, code == "ACRU")
+budsOnlyJohnRO <- subset(budsOnlyJohn, code == "QURU")
+leavesOnlyJohnRM <- subset(leavesOnlyJohn, code == "ACRU")
+leavesOnlyJohnRO <- subset(leavesOnlyJohn, code == "QURU")
+
+avgBudBurstSchoolRM=overviewInfo(budsOnlySchoolRM, "year", "value", allYears)
+avgBudBurstSchoolRO=overviewInfo(budsOnlySchoolRO, "year", "value", allYears)
+avgLeafFallSchoolRM=overviewInfo(leavesOnlySchoolRM, "year", "value", allYears)
+avgLeafFallSchoolRO=overviewInfo(leavesOnlySchoolRO, "year", "value", allYears)
+avgBudBurstJohnRM=overviewInfo(budsOnlyJohnRM, "year", "value", allYears)
+avgBudBurstJohnRO=overviewInfo(budsOnlyJohnRO, "year", "value", allYears)
+avgLeafFallJohnRM=overviewInfo(leavesOnlyJohnRM, "year", "value", allYears)
+avgLeafFallJohnRO=overviewInfo(leavesOnlyJohnRO, "year", "value", allYears)
+
+bestTreeFrame=data.frame(x=rep(as.numeric(allYears), 4), budBurst=c(avgBudBurstSchoolRM,avgBudBurstSchoolRO, avgBudBurstJohnRM,avgBudBurstJohnRO), 
+                         leafFall= c(avgLeafFallSchoolRM,avgLeafFallSchoolRO, avgLeafFallJohnRM,avgLeafFallJohnRO), 
+                         group=c(rep("Schoolyard", 2*length(allYears)), rep("OKeefe", 2*length(allYears))),
+                         tree=c(rep("Red Maple_School", length(allYears)),rep("Red Oak_School", length(allYears)),rep("Red Maple_John", length(allYears)),rep("Red Oak_John", length(allYears))))
+
+
+
+graph1=ggplot()+
+  geom_line(data=bestTreeFrame, aes(x=x, y=budBurst, group=tree, color=tree, pch=tree)) +
+  geom_point(data=bestTreeFrame, aes(x=x, y=budBurst), size=2) +
+  geom_line(data=bestTreeFrame, aes(x=x, y=leafFall, group=tree, color=tree, pch=tree)) +
+  geom_point(data=bestTreeFrame, aes(x=x, y=leafFall), size=2) +  
+  scale_color_manual(values=c("skyblue","navyblue","pink","red")) +
+  labs(x="Year", y="Julian Day", title="Yearly Bud Burst and Leaf Fall") +
+  scale_y_continuous(breaks=seq(100,320,10), minor_breaks=NULL) +
+  scale_x_continuous(limits=c(2004, 2015))
+graph1
+
+
+bestTreeFrame$leavesOnDays=bestTreeFrame$leafFall-bestTreeFrame$budBurst
+
+
+graph2=ggplot() + 
+  geom_line(data=bestTreeFrame, aes(x=x, y=leavesOnDays, group=tree, color=tree))+
+  geom_point(data=bestTreeFrame, aes(x=x, y=leavesOnDays)) +
+  scale_x_continuous(limits=c(2005, 2015), breaks=seq(2005, 2015, 1)) +
+  scale_color_manual(values=c("skyblue","navyblue","pink","red"))
+  #geom_abline(slope=coefRM[2], intercept=coefRM[1])+
+  #annotate("text", x=2015, y=153, label=paste("R^2:", rsquare))
+  labs(x="Year", y="# Of Days", title="Leaves On Days, Overall")
+graph2
+
+
+
+
+
+

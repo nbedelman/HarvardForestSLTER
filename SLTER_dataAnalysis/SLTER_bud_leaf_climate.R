@@ -16,13 +16,13 @@ library(ggmap)
 ################# Format Data ####################
 #read background data - school info and species info
 
-schoolInfo=read.csv("../school_info.csv", col.names = c("code","name","teachers","address","town","state",
+schoolInfo=read.csv("data/school_info.csv", col.names = c("code","name","teachers","address","town","state",
                                                         "lat","lon","elev","buds","hwa", "vernal","stream","forest"))
 
-speciesCodes=read.csv("../species_codes.csv")
+speciesCodes=read.csv("data/species_codes.csv")
 
 ###### read and format bud burst
-budBurst=read.csv("../50p_budBurst.csv", col.names = c("school", "teacher", "year", "tree", "speciesCode", "budBurst"),
+budBurst=read.csv("data/50p_budBurst.csv", col.names = c("school", "teacher", "year", "tree", "speciesCode", "budBurst"),
                   colClasses = c("character","character","numeric","numeric","character","numeric"))
 
 #give a unique identifier to each tree
@@ -30,7 +30,7 @@ budBurst$schoolNum=as.numeric(as.factor(budBurst$school))
 budBurst$uniqTreeID=(budBurst$schoolNum*100 + budBurst$tree)*10+1 #spring data ends with 1
 
 ######### read and format leaf fall
-leafFall=read.csv("../50p_leafFall.csv", col.names = c("school", "teacher", "year", "tree", "speciesCode", "leafFall"),
+leafFall=read.csv("data/50p_leafFall.csv", col.names = c("school", "teacher", "year", "tree", "speciesCode", "leafFall"),
                   colClasses = c("character","character","numeric","numeric","character","numeric"))
 
 #give a unique identifier to each tree
@@ -91,8 +91,8 @@ overviewInfo <- function(data, timeColumn, dataColumn, allDates){
 
 allYears=unique(summaryData$year)
 
- budsOnly=subset(summaryData, variable=="bud")
- leavesOnly=subset(summaryData, variable=="leaf")
+budsOnly=subset(summaryData, variable=="bud")
+leavesOnly=subset(summaryData, variable=="leaf")
 
 
 ################## Overall Data Graph ########################
@@ -309,7 +309,7 @@ school <- c(NA)
 ##Pick one type of species identifier, and list as many as you want. If left blank, all will be included
 genus <- c(NA)
 species <- c(NA)
-speciesCode <- c(NA)
+speciesCode <- c("RO")
 
 #SELECT GRAPH TYPE#
 #The x-axis will be years. Pick a category from above for the y axis
@@ -354,12 +354,36 @@ siteFrame$budBurst=budBurstVec
 
 leafFallVec=c()
 for (i in allVars){
-  thisVar=subset(leavesOnly, budsOnly[yAxis][[1]]==i)
+  thisVar=subset(leavesOnly, leavesOnly[yAxis][[1]]==i)
   leafFallVec=c(leafFallVec,overviewInfo(thisVar, "year", "value", allYears))
 }
 siteFrame$leafFall=leafFallVec
 siteFrame$leavesOnDays=siteFrame$leafFall-siteFrame$budBurst
 siteFrame$year=as.numeric(as.character(siteFrame$year))
+
+means <- c()
+nNums <- c()
+for (i in unique(siteFrame$y)){
+  thisSite <- subset(siteFrame, y==i)
+  avg <- mean(thisSite$leavesOnDays, na.rm=TRUE)
+  nNum <- length(which(is.na(thisSite$leavesOnDays)==FALSE))
+  means <- c(means,avg)
+  nNums <- c(nNums,nNum)
+}
+avgLeavesOnDays <- data.frame(site = unique(siteFrame$y), mean = means, nNum=nNums)
+schoolInfo$town <- as.character(schoolInfo$town)
+
+lats <- c()
+lons <- c()
+for(site in avgLeavesOnDays$site){
+  firstHit <- which(schoolInfo$town == site)[1]
+  lat <- as.numeric(as.character(schoolInfo[firstHit,]$lat))
+  lon <- as.numeric(as.character(schoolInfo[firstHit,]$lon))
+  lats <- c(lats,lat)
+  lons <- c(lons,lon)
+}
+avgLeavesOnDays$lat <- lats
+avgLeavesOnDays$lon <- lons
 
 varVec=c()
 interceptVec=c()
@@ -381,6 +405,18 @@ for (i in allVars){
   }
 }
 modelFrame=data.frame(var=varVec, intercept=interceptVec, slope=slopeVec,r2=r2Vec, nNum=nNumVec)
+lats <- c()
+lons <- c()
+for(var in modelFrame$var){
+  firstHit <- which(schoolInfo$town == var)[1]
+  lat <- as.numeric(as.character(schoolInfo[firstHit,]$lat))
+  lon <- as.numeric(as.character(schoolInfo[firstHit,]$lon))
+  lats <- c(lats,lat)
+  lons <- c(lons,lon)
+}
+modelFrame$lat <- lats
+modelFrame$lon <- lons
+
 
 avgBudBurst=overviewInfo(budsOnly, "year", "value", allYears)
 avgLeafFall=overviewInfo(leavesOnly, "year", "value", allYears)
@@ -424,7 +460,7 @@ title3=paste("Leaves On Days by", yAxis)
 graph3=ggplot() + 
   geom_line(data=siteFrame, aes(x=year, y=leavesOnDays, group=y, color=y))+
   geom_point(data=siteFrame, aes(x=year, y=leavesOnDays, color=y)) +
-  geom_abline(aes(slope=slope, intercept=intercept, linetype=var), data=modelFrame) + 
+  #geom_abline(aes(slope=slope, intercept=intercept, linetype=var), data=modelFrame) + 
   #annotate("text", x=2015, y=155, label= paste("R^2: ", rsquareOverall)) +
   labs(x="Year", y="# Of Days", color=yAxis, linetype="Linear") +
   ggtitle(bquote(atop(.(title3), atop(italic(.(dataInfo)), ""))))   +
@@ -446,13 +482,21 @@ graph4=ggplot() +
 ggsave(filename = paste0(title4, dataInfo,".png"))
 graph4
   
+title5="Avg Leaves on Days Map"
+mapString=ggmap(get_map(location="Massachusetts", zoom=8, source="stamen", maptype="terrain-background", color="bw"), extent = "device")
+map1=mapString+
+  geom_point(data=avgLeavesOnDays, aes(x=lon, y=lat,fill=mean, size=nNum), pch=21) + #, alpha=.01,na.rm=TRUE)+
+  scale_fill_gradient(low="yellow", high="red") +
+  labs(title="Average Leaves on Days", size="Number of Observations (years)", color="Leaves On Days")
+ggsave(filename = paste0(title5, dataInfo,".png"))
+map1
 
-towns=c()
-nums=c()
-for (tow in unique(redMaple$town)){
-  sub=subset(redMaple, town==tow)
-  towns=c(towns,tow)
-  nums=c(nums,length(unique(sub$year)))
-}
-
-daFrame=data.frame(town=towns,num=nums )
+title6="Change in Leaves on Days Map"
+mapString=ggmap(get_map(location="Massachusetts", zoom=8, source="stamen", maptype="terrain-background", color="bw"), extent = "device")
+map1=mapString+
+  geom_point(data=subset(modelFrame, nNum>2), aes(x=lon, y=lat,fill=slope, size=nNum),pch=21) + #, alpha=.01,na.rm=TRUE)+
+  scale_fill_gradient2(low="blue", mid="white",high="red", midpoint=0) +
+  scale_size(range=c(3,8))+
+  labs(title="Change in Leaves on Days", size="Number of Observations (years)", color="Degree of Change")
+ggsave(filename = paste0(title6, dataInfo,".png"))
+map1
