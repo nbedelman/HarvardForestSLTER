@@ -307,7 +307,7 @@ town <- c(NA)
 school <- c(NA)
 
 ##Pick one type of species identifier, and list as many as you want. If left blank, all will be included
-genus <- c(NA)
+genus <- c("Quercus")
 species <- c(NA)
 speciesCode <- c("RO")
 

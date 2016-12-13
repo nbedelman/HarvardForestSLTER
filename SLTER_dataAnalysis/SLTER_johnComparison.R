@@ -26,15 +26,36 @@ budBurst$uniqTreeID=(budBurst$schoolNum*100 + budBurst$tree)*10+1 #spring data e
 ######### read and format leaf fall
 leafFall=read.csv("data/50p_leafFall.csv", col.names = c("school", "teacher", "year", "tree", "speciesCode", "leafFall"),
                   colClasses = c("character","character","numeric","numeric","character","numeric"))
-unWantedRows <- c()
-for (i in seq(1,length(neverFellTreeID))){
-  unWantedRows <- c(unWantedRows, which(leafFall$tree==neverFellTreeID[i] & leafFall$year == neverFellYear[i] & leafFall$teacher==neverFellTeacher[i]))
-}
 
-leafFall <- leafFall[-unWantedRows,]
 #give a unique identifier to each tree
 leafFall$schoolNum=as.numeric(as.factor(leafFall$school))
 leafFall$uniqTreeID=(leafFall$schoolNum*100 + leafFall$tree)*10+2 #fall data ends with 2
+
+#some trees were recorded as never having lost leaves. These should be removed.
+# neverFellTeacher <- c()
+# neverFellTreeID <- c()
+# neverFellTree <- c()
+# neverFellYear <- c()
+# for (i in unique(leafFall$uniqTreeID)){
+#   singleTree <- subset(leafFall, uniqTreeID==i)
+#   for (j in unique(singleTree$year)){
+#     singleYear <- subset(singleTree, year==j)
+#     if (max(singleYear$Fallen.Leaves) == 0 & max(singleYear$Total.Leaves)>0 ){
+#       neverFellTree <- c(neverFellTree, i)
+#       neverFellYear <- c(neverFellYear, j)
+#       neverFellTeacher <- c(neverFellTeacher, as.character(unique(singleYear$Teacher)))
+#       neverFellTreeID <- c(neverFellTreeID, unique(singleYear$Tree.ID))
+#     }
+#   }
+# }
+# 
+# unWantedRows <- c()
+# for (i in seq(1,length(neverFellTreeID))){
+#   unWantedRows <- c(unWantedRows, which(leafFall$tree==neverFellTreeID[i] & leafFall$year == neverFellYear[i] & leafFall$teacher==neverFellTeacher[i]))
+# }
+# 
+# leafFall <- leafFall[-unWantedRows,]
+
 
 ####Combine Data
 summaryData=data.frame(school=c(budBurst$school, leafFall$school), 
@@ -76,9 +97,10 @@ summaryData$lat <- as.character(schoolInfo[locVec,7])
 summaryData$lon <- as.character(schoolInfo[locVec,8])
 summaryData$elev <- as.character(schoolInfo[locVec,9])
 summaryData$set <- rep("Schoolyard",nrow(summaryData))
+summaryData$sciNames <- paste(tolower(summaryData$genus),summaryData$species)
 
 
-importantColumns <- c("year","uniqTreeID", "value", "variable", "speciesCode", "species","genus", "set")
+importantColumns <- c("year","uniqTreeID", "value", "variable", "speciesCode", "species","genus", "set","sciNames")
 summaryDataSchool <- summaryData[importantColumns]
 summaryDataSchool <-rename(summaryDataSchool, c("uniqTreeID"="treeID", "speciesCode"="code"))
 
@@ -124,7 +146,7 @@ johnTreeInfo$treeName <- treevec
 
 Svec <- c()
 for (i in seq(1,length(johnSpring$treeName))){
-  tryCatch(Svec[i] <- (which(johnTreeInfo$treeName==as.character(johnSpring$treeName[i]))), 
+  tryCatch(Svec[i] <- (which(johnTreeInfo$treeName==as.character(johnSpring$treeName[i]))[1]), 
            error=function(e){Svec[i] <- 116})
 }
 
@@ -268,9 +290,13 @@ for (i in seq(1,length(treeIDs))){
 JohnSummary <- rbind(johnFallSummary, johnSpringSummary)
 JohnSummary$set <- rep("OKeefe", nrow(JohnSummary))
 
+#Make codes compatible with schoolyard
+JohnSummary$sciName <- c(paste(JohnSummary$genus,JohnSummary$species))
+
+
 ####################Combine John and Schoolyard Data################
 totalSummary <- rbind(JohnSummary, summaryDataSchool)
-
+totalSummary$sciName <- paste(tolower(totalSummary$genus),totalSummary$species)
 ################ Graphing Functions ################
 
 overviewInfo <- function(data, timeColumn, dataColumn, allDates){
@@ -380,7 +406,62 @@ graph2=ggplot() +
 graph2
 
 
+######Edit 12/12/16 for more species##########
+#generalize!
 
+getGrowingSeason <- function(speciesVec, allYears, schoolLeaves,schoolBuds, johnLeaves,johnBuds){
+  x=c()
+  group=c(rep("Schoolyard", length(speciesVec)*length(allYears)), rep("OKeefe", length(speciesVec)*length(allYears)))
+  budBurstSchool=c()
+  budBurstJohn=c()
+  leafFallSchool=c()
+  leafFallJohn=c()
+  treeSchool=c()
+  treeJohn=c()
+  for(spec in speciesVec){
+    budBurstSchool <- c(budBurstSchool, overviewInfo(subset(schoolBuds,sciName==spec), "year", "value", allYears))
+    budBurstJohn <- c(budBurstJohn, overviewInfo(subset(johnBuds,sciName==spec), "year", "value", allYears))
+    leafFallSchool <- c(leafFallSchool, overviewInfo(subset(schoolLeaves,sciName==spec), "year", "value", allYears))
+    leafFallJohn <- c(leafFallJohn, overviewInfo(subset(johnLeaves,sciName==spec), "year", "value", allYears))
+    treeSchool <- c(treeSchool, rep(paste0(spec,"_School"),length(allYears)))
+    treeJohn <- c(treeJohn, rep(paste0(spec,"_John"),length(allYears)))
+    x <- c(x,rep(as.numeric(allYears),2))
+  }
+  bestTreeFrame=data.frame(x=x, budBurst=c(budBurstSchool,budBurstJohn), 
+                           leafFall= c(leafFallSchool,leafFallJohn), 
+                           group=c(rep("Schoolyard", length(speciesVec)*length(allYears)), rep("OKeefe", length(speciesVec)*length(allYears))),
+                           tree=c(treeSchool, treeJohn))
+  
+  graph1=ggplot()+
+    geom_line(data=bestTreeFrame, aes(x=x, y=budBurst, group=tree, color=tree, pch=tree)) +
+    geom_point(data=bestTreeFrame, aes(x=x, y=budBurst), size=2) +
+    geom_line(data=bestTreeFrame, aes(x=x, y=leafFall, group=tree, color=tree, pch=tree)) +
+    geom_point(data=bestTreeFrame, aes(x=x, y=leafFall), size=2) +  
+    scale_color_manual(values=c("skyblue","navyblue","pink","red","lightGreen","forestGreen","grey","black")) +
+    labs(x="Year", y="Julian Day", title="Yearly Bud Burst and Leaf Fall") +
+    scale_y_continuous(breaks=seq(100,320,10), minor_breaks=NULL) +
+    scale_x_continuous(limits=c(2004, 2015))
+  ggsave(filename="BBvsLF_.pdf")
+  
+  graph1
+  
+  bestTreeFrame$leavesOnDays=bestTreeFrame$leafFall-bestTreeFrame$budBurst
+  
+  
+  graph2=ggplot() + 
+    geom_line(data=bestTreeFrame, aes(x=x, y=leavesOnDays, group=tree, color=tree))+
+    geom_point(data=bestTreeFrame, aes(x=x, y=leavesOnDays)) +
+    scale_x_continuous(limits=c(2005, 2015), breaks=seq(2005, 2015, 1)) +
+    scale_color_manual(values=c("skyblue","navyblue","pink","red","lightGreen","forestGreen","grey","black"))
+  #geom_abline(slope=coefRM[2], intercept=coefRM[1])+
+  #annotate("text", x=2015, y=153, label=paste("R^2:", rsquare))
+  labs(x="Year", y="# Of Days", title="Leaves On Days, Overall")
+  ggsave(filename="leavesOnDays_.pdf")
+  graph2
+  return(bestTreeFrame)
+}
 
+speciesVec <- c("quercus rubrum")
+getGrowingSeason(speciesVec, allYears, leavesOnlySchool,budsOnlySchool, leavesOnlyJohn,budsOnlyJohn)
 
 

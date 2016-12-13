@@ -15,6 +15,7 @@
 #install.packages("reshape2")
 library("ggplot2")
 library("reshape2")
+library("ggmap")
 
 ############################################
 ###### Fall Phenology Data ############
@@ -96,14 +97,14 @@ for (i in seq(1,length(neverFellTree))){
   unWantedRows <- c(unWantedRows, which(fallPheno$uniqTreeID==neverFellTree[i] & fallPheno$Year == neverFellYear[i]))
 }
 
-# fallPheno <- fallPheno[-unWantedRows,]
+fallPheno <- fallPheno[-unWantedRows,]
 fallPheno$pctFallen=fallPheno$Fallen.Leaves/fallPheno$Total.Leaves
 
 ############# GRAPHING ######################
 
 ####################General Graphing Functions and preparation#############################################
 
-graphingFrame=data.frame(julDate=fallPheno$Julian, pctFallen=fallPheno$pctFallen, leafColor=fallPheno$Tree.Color, genus=fallPheno$genus, species=fallPheno$species, year=fallPheno$Year)
+graphingFrame=data.frame(julDate=fallPheno$Julian, pctFallen=fallPheno$pctFallen, leafColor=fallPheno$Tree.Color, genus=fallPheno$genus, species=fallPheno$species, year=fallPheno$Year, id=fallPheno$uniqTreeID, school=fallPheno$School.Code)
 attach(graphingFrame)
 sorted=graphingFrame[order(julDate),]
 allDates=unique(sorted$julDate)
@@ -223,6 +224,113 @@ f <- function(index,genusList, dateList, column){
   return (thisGenus)
 }
 
+
+#####################Edit 12/9/16: need info by species and location####################
+#Answering the question of spatial distribution of trees across study area
+#First, associate the school code with location info
+
+schoolInfo=read.csv("data/school_info.csv", col.names = c("code","name","teachers","address","town","state",
+                                                          "lat","lon","elev","buds","hwa", "vernal","stream","forest"))
+
+graphingFrame$sciName <- paste(graphingFrame$genus, graphingFrame$species)
+bySpecies=graphingFrame[order(graphingFrame$sciName),]
+allSpecies=unique(as.character(byGenera$sciName))
+
+locVec <- c()
+for (i in seq(1,length(bySpecies$school))){
+  (locVec[i] <- (which(schoolInfo$code==as.character(bySpecies$school[i]))))
+}
+bySpecies$town <- as.character(schoolInfo[locVec,5])
+bySpecies$lat <- as.character(schoolInfo[locVec,7])
+bySpecies$lon <- as.character(schoolInfo[locVec,8])
+bySpecies$elev <- as.character(schoolInfo[locVec,9])
+
+#First graph will be number of unique trees
+
+reps <- data.frame(julDate=character(), pctFallen=numeric(), leafColor=numeric(), genus=character(), species=character(), year=integer(),id=integer(), school=character(),
+                   sciName=character(),town=character(),lat=numeric(),lon=numeric(),elev=numeric())
+for(id in unique(bySpecies$id)){
+  firstOccur <- which(bySpecies$id == id)[1]
+  rep=bySpecies[firstOccur,]
+  reps <- rbind(reps,rep)
+}
+
+reducedReps <- data.frame(sciName=reps$sciName,town=reps$town,lat=reps$lat,lon=reps$lon, id=paste(reps$sciName,reps$town))
+mostTrees <- subset(reducedReps, sciName %in% c("Acer rubrum", "Acer saccharum", "Quercus rubrum", "Fagus grandifolia"))
+
+treeSummary <- data.frame(sciName=character(),town=character(),lat=numeric(),lon=numeric())
+
+numberVec <- c()
+for(id in unique(mostTrees$id)){
+  treeSummary <- rbind(treeSummary,mostTrees[which(mostTrees$id==id)[1],][1:4])
+  numberVec <- c(numberVec,length(which(mostTrees$id==id)))
+}
+treeSummary$num <- numberVec
+treeSummary$lon <- as.numeric(as.character(treeSummary$lon))
+treeSummary$lat <- as.numeric(as.character(treeSummary$lat))
+
+mapString=ggmap(get_map(location="Massachusetts", zoom=7, maptype="satellite"), extent = "device")
+mapString
+map1=mapString+
+  geom_jitter(data=treeSummary, aes(x=lon, y=lat, color=sciName, size=num),width=.03, height=.03)+
+  scale_size_continuous(range=c(2,12))+
+  theme(legend.text=element_text(size = 14))+
+  scale_color_manual(values=c("red","forestgreen","blue","orange","yellow","violet"))
+map1
+
+#Second graph is number of unique observations
+
+mostTrees_obs <- subset(bySpecies, sciName %in% c("Acer rubrum", "Acer saccharum", "Quercus rubrum", "Fagus grandifolia"))
+reduced_obs <- data.frame(sciName=mostTrees_obs$sciName,town=mostTrees_obs$town,lat=mostTrees_obs$lat,lon=mostTrees_obs$lon, id=paste(mostTrees_obs$sciName,mostTrees_obs$town))
+treeSummary_obs <- data.frame(sciName=character(),town=character(),lat=numeric(),lon=numeric())
+numberVec <- c()
+for(id in unique(reduced_obs$id)){
+  treeSummary_obs <- rbind(treeSummary_obs,reduced_obs[which(reduced_obs$id==id)[1],][1:4])
+  numberVec <- c(numberVec,length(which(reduced_obs$id==id)))
+}
+treeSummary_obs$num <- numberVec
+treeSummary_obs$lon <- as.numeric(as.character(treeSummary_obs$lon))
+treeSummary_obs$lat <- as.numeric(as.character(treeSummary_obs$lat))
+
+map2=mapString+
+  geom_jitter(data=treeSummary_obs, aes(x=lon, y=lat, color=sciName, size=num),width=.03, height=.03)+
+  scale_size_continuous(range=c(2,12))+
+  theme(legend.text=element_text(size = 14))+
+  scale_color_manual(values=c("red","forestgreen","blue","orange","yellow"))
+map2
+
+
+#Get info on the amount of data we have on each genus
+genusInfoFrame=data.frame(Genus=c("numTrees", "numObs", "numYears"))
+for (i in 1:length(allGenera)){
+  thisFrame=subset(fallPheno, fallPheno$genus==allGenera[i])
+  uniques=unique(thisFrame$uniqTreeID)
+  numTrees=length(uniques)
+  numObs=nrow(thisFrame)
+  numYears=length(unique(thisFrame$Year))
+  genusInfoFrame[allGenera[i]] <- c(numTrees,numObs, numYears)
+}
+
+#set up data frame
+byGenusFrame=data.frame(Date=allDates)
+for (i in 1:length(allGenera)){
+  byGenusFrame[i+1] <- rep(0,length(allDates))
+}
+colnames(byGenusFrame) <- c("Date", allGenera)
+
+
+f <- function(index,genusList, dateList, column){
+  allVals=subset(sorted, genus==genusList[index])
+  thisGenus=c()
+  for (date in dateList){
+    thisDate=subset(allVals, julDate==date)[column][[1]]
+    avg=mean(thisDate, na.rm=TRUE)
+    thisGenus=c(thisGenus,avg)
+  }
+  return (thisGenus)
+}
+
+
 ######################fallen leaves as percent of total leaves, by Julian date, by Genus######################
 
 #correctlyDone=subset(sorted, pctFallen <=1)
@@ -247,6 +355,32 @@ p <- function(x){
   }
 }
 p(byGenusFrame)
+
+justQAndF <- data.frame("date"=byGenusFrame[1],"Fagus"= byGenusFrame[13], "Quercus"=byGenusFrame[32])
+p(justQAndF)
+
+##########updates 12/9#######
+#Address the questions in Pam's email from 12/7
+#First: Is there a data quality issue at the end of the seaseon for oak and beech? Do teachers stop inputting data after their leaves have fallen?
+quercus <- subset(byGenera, genus=="Quercus")
+hist(quercus$julDate, breaks=50, main="Number of entries per Julian Day, Quercus", xlab="Julian Day", ylab="Number of Entries")
+
+fagus <- subset(byGenera, genus=="Fagus")
+hist(fagus$julDate, breaks=50, main="Number of entries per Julian Day, Fagus", xlab="Julian Day", ylab="Number of Entries")
+
+#Answer: Yes, there is a steep dropoff of data entry towards the end of the season. Solutions: disregard that data? Need to investigate further. 
+
+finalDays=subset(fagus, julDate>320)
+
+plot <- ggplot(data=x, aes(x=Date)) + aes_string(y = nm[i]) + geom_point() + stat_smooth()+
+  scale_y_continuous(limits=c(-.1, 1.1)) +
+  scale_x_continuous(limits=c(240, 350)) +
+  annotate("text", x = 253, y = 1.0, label = paste0("Number of Trees: ", genusInfoFrame[1,i])) +
+  annotate("text", x = 253, y = 0.9, label = paste0("Number of Observations: ",genusInfoFrame[2,i])) +
+  annotate("text", x = 253, y = 0.8, label = paste0("Number of Years: ",genusInfoFrame[3,i])) +
+  labs(title=paste0("Average Number of Leaves Fallen by Julian Date, ", nm[i]), x="Julian Date", y="Percent Fallen")
+
+
 
 #Plot all the species on one graph (big mess!)
 #data_long <- melt(byGenusFrame, id="Date")
